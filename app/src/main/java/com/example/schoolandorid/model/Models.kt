@@ -63,8 +63,13 @@ data class Announcement(
     val title: String = "",
     val summary: String = "",
     val body: String = "",
+    val image_url: String? = null,
+    val link_url: String? = null,
+    val link_text: String? = null,
     val published: Boolean = false,
     val created_at: String = "",
+    val updated_at: String = "",
+    val published_at: String? = null,
 )
 
 data class CampusTool(
@@ -136,9 +141,25 @@ data class AIMessage(
     val id: Long = 0,
     val role: String = "",
     val text: String = "",
+    /** 模型给出最终答案前的思考过程（流式 reasoning_content）。 */
+    val reasoning: String? = null,
     val model: String? = null,
     val source: String? = null,
+    /** 知识库命中待确认：true 时需要用户选择「是 / 否，联网搜索」 */
+    val needs_feedback: Boolean = false,
+    /** 反馈结果：yes=知识库答案有帮助，no=已联网重答 */
+    val feedback: String? = null,
     val created_at: String = "",
+)
+
+/** SSE 流式回答事件：type = thinking / text / done / error。 */
+data class AIStreamEvent(
+    val type: String = "",
+    val delta: String? = null,
+    val message: String? = null,
+    val user_message: AIMessage? = null,
+    val answer: AIMessage? = null,
+    val remaining: Int = 0,
 )
 
 data class AIConversation(
@@ -147,6 +168,21 @@ data class AIConversation(
     val model: String = "",
     val messages: List<AIMessage> = emptyList(),
     val created_at: String = "",
+)
+
+/** 申诉记录（对齐鸿蒙端 Appeal）。 */
+data class Appeal(
+    val id: Long = 0,
+    val punishment_id: Long = 0,
+    val account_id: Long = 0,
+    /** ban=账号封禁申诉，其余为禁言申诉 */
+    val kind: String = "",
+    val reason: String = "",
+    /** pending=待处理 lifted=处罚已解除 upheld=维持处罚 */
+    val status: String = "",
+    val result: String? = null,
+    val created_at: String = "",
+    val resolved_at: String? = null,
 )
 
 data class MyVerification(
@@ -188,7 +224,12 @@ data class NotificationsResp(val items: List<AppNotification> = emptyList(), val
 
 data class UnreadResp(val unread: Int = 0)
 
-data class DirectConversationDetail(val id: Long = 0, val messages: List<DirectMessage> = emptyList())
+data class DirectConversationDetail(
+    val id: Long = 0,
+    val messages: List<DirectMessage> = emptyList(),
+    val updated_at: String = "",
+    val unread_count: Int = 0,
+)
 
 data class DirectConversationResp(
     val conversation: DirectConversationDetail,
@@ -206,4 +247,20 @@ data class AIConversationResp(val conversation: AIConversation)
 
 data class AskAIResp(val user_message: AIMessage, val answer: AIMessage, val remaining: Int = 0)
 
+/** AI 知识库答案反馈：satisfied=false 时 answer 为联网重答的新答案。 */
+data class AIFeedbackResp(val answer: AIMessage? = null, val remaining: Int = 0)
+
 data class UploadResp(val url: String = "", val dev_mode: Boolean = false)
+
+data class ResetPasswordResp(val reset: Boolean = false)
+
+/** 举报等仅返回提示语的响应。 */
+data class MessageResp(val message: String = "")
+
+data class UpdatePostResp(val post: Post, val message: String = "")
+
+data class PublicUserResp(val user: PublicAccount, val posts: List<Post> = emptyList())
+
+data class AnnouncementResp(val announcement: Announcement)
+
+data class SubmitAppealResp(val submitted: Boolean = false)

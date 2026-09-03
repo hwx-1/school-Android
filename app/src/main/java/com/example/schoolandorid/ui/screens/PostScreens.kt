@@ -33,10 +33,14 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +58,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +82,8 @@ import com.example.schoolandorid.ui.components.EmptyState
 import com.example.schoolandorid.ui.components.LoadingView
 import com.example.schoolandorid.ui.components.NavBar
 import com.example.schoolandorid.ui.components.PostCard
+import com.example.schoolandorid.ui.components.ReportDialog
+import com.example.schoolandorid.ui.components.ReportTarget
 import com.example.schoolandorid.ui.components.TagChip
 import com.example.schoolandorid.ui.errorMessage
 import com.example.schoolandorid.ui.toast
@@ -100,6 +108,10 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
     var startingChat by remember { mutableStateOf(false) }
     var replyTo by remember { mutableStateOf<CommentItem?>(null) }
     var expandedRoots by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var reportTarget by remember { mutableStateOf<ReportTarget?>(null) }
+    var deleteConfirm by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
     suspend fun loadPost(): Boolean {
         return try {
@@ -168,6 +180,27 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
 
     fun startReply(comment: CommentItem) {
         replyTo = comment
+    }
+
+    /** 删除帖子（对齐鸿蒙端 PostDetail.ets confirmDeletePost）：确认后删除并返回。 */
+    fun deletePost() {
+        val p = post ?: return
+        scope.launch {
+            try {
+                Api.deletePost(p.id)
+                context.toast("帖子已删除")
+                nav.pop()
+            } catch (err: Throwable) {
+                context.toast(err.errorMessage("删除失败"))
+            }
+        }
+    }
+
+    /** 复制帖子链接（对齐鸿蒙端 PostDetail.ets copyLink）。 */
+    fun copyLink() {
+        val p = post ?: return
+        clipboard.setText(AnnotatedString("${AppConfig.API_BASE_URL}/posts/${p.id}"))
+        context.toast("帖子链接已复制")
     }
 
     fun startChat() {
@@ -241,6 +274,32 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
         }
     }
 
+    // 举报弹窗（对齐 web 端 PostDetailPage ReportDialog）
+    reportTarget?.let { target ->
+        ReportDialog(target = target, onClose = { reportTarget = null })
+    }
+
+    if (deleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { deleteConfirm = false },
+            title = { Text("删除帖子") },
+            text = { Text("删除后不可恢复，确定继续吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteConfirm = false
+                    deletePost()
+                }) {
+                    Text("删除", color = AppColors.DANGER)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteConfirm = false }) {
+                    Text("取消", color = AppColors.TEXT_SECONDARY)
+                }
+            },
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(AppColors.PAGE_BG).imePadding()) {
         NavBar(title = "帖子详情", onBack = { nav.pop() })
 
@@ -276,10 +335,15 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
                                 .padding(16.dp),
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                AvatarView(p.author.avatar, p.author.nickname, 44)
+                                val isOwnPost = p.author.id == (AppState.account?.id ?: -1L)
+                                Box(modifier = Modifier.clickable { nav.push(Route.UserProfile(p.author.id)) }) {
+                                    AvatarView(p.author.avatar, p.author.nickname, 44)
+                                }
                                 Column(
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { nav.push(Route.UserProfile(p.author.id)) },
                                 ) {
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -297,7 +361,7 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
                                     }
                                     Text(TimeUtil.format(p.created_at), fontSize = 12.sp, color = AppColors.TEXT_SECONDARY)
                                 }
-                                if (p.author.id != (AppState.account?.id ?: -1L)) {
+                                if (!isOwnPost) {
                                     Button(
                                         onClick = { startChat() },
                                         enabled = !startingChat,
@@ -306,6 +370,53 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
                                         colors = ButtonDefaults.buttonColors(containerColor = AppColors.PRIMARY),
                                     ) {
                                         Text("私信", fontSize = 13.sp)
+                                    }
+                                }
+                                // 更多操作（对齐 web 端 PostCard 菜单 / 鸿蒙端 PostDetail 更多菜单）
+                                Box {
+                                    Text(
+                                        "⋯",
+                                        fontSize = 20.sp,
+                                        color = AppColors.TEXT_SECONDARY,
+                                        modifier = Modifier
+                                            .clickable { menuOpen = true }
+                                            .padding(horizontal = 6.dp),
+                                    )
+                                    DropdownMenu(
+                                        expanded = menuOpen,
+                                        onDismissRequest = { menuOpen = false },
+                                    ) {
+                                        if (isOwnPost) {
+                                            DropdownMenuItem(
+                                                text = { Text("编辑帖子") },
+                                                onClick = {
+                                                    menuOpen = false
+                                                    nav.push(Route.Compose(p.id))
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("删除帖子", color = AppColors.DANGER) },
+                                                onClick = {
+                                                    menuOpen = false
+                                                    deleteConfirm = true
+                                                },
+                                            )
+                                        } else {
+                                            DropdownMenuItem(
+                                                text = { Text("举报帖子") },
+                                                onClick = {
+                                                    menuOpen = false
+                                                    reportTarget = ReportTarget("post", p.id)
+                                                },
+                                            )
+                                        }
+                                        DropdownMenuItem(
+                                            text = { Text("复制链接") },
+                                            onClick = {
+                                                menuOpen = false
+                                                copyLink()
+                                            },
+                                        )
                                     }
                                 }
                             }
@@ -405,7 +516,12 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
                             } else {
                                 rootComments().forEach { root ->
                                     Column {
-                                        CommentItemView(comment = root, onReply = { startReply(it) })
+                                        CommentItemView(
+                                            comment = root,
+                                            onReply = { startReply(it) },
+                                            onReport = { reportTarget = ReportTarget("comment", it.id) },
+                                            onAuthor = { nav.push(Route.UserProfile(it.author.id)) },
+                                        )
                                         val replies = repliesOf(root.id)
                                         if (replies.isNotEmpty()) {
                                             Column(modifier = Modifier.padding(start = 42.dp)) {
@@ -415,6 +531,8 @@ fun PostDetailScreen(nav: NavStack, postId: Long) {
                                                         isReply = true,
                                                         replyToName = replyTargetName(reply),
                                                         onReply = { startReply(it) },
+                                                        onReport = { reportTarget = ReportTarget("comment", it.id) },
+                                                        onAuthor = { nav.push(Route.UserProfile(it.author.id)) },
                                                     )
                                                 }
                                                 if (replies.size > 2) {
@@ -536,18 +654,35 @@ private val searchSortOptions = listOf(
     "bookmarks" to "收藏",
 )
 
-/** 发布动态（对齐鸿蒙端 pages/Compose.ets）。 */
+/** 发布 / 编辑动态（对齐鸿蒙端 pages/Compose.ets 与 web 端 /compose/:postId）。 */
 @Composable
-fun ComposeScreen(nav: NavStack) {
+fun ComposeScreen(nav: NavStack, postId: Long = 0) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isEditing = postId > 0
     var text by remember { mutableStateOf("") }
     var tagInput by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf<List<String>>(emptyList()) }
     var images by remember { mutableStateOf<List<PendingImage>>(emptyList()) }
     var publishing by remember { mutableStateOf(false) }
+    var loadingPost by remember { mutableStateOf(isEditing) }
 
-    fun canPublish() = text.trim().isNotEmpty() && !publishing && images.none { it.uploading }
+    // 编辑模式：载入旧帖内容（新版本审核通过前旧版本继续公开）
+    LaunchedEffect(postId) {
+        if (!isEditing) return@LaunchedEffect
+        try {
+            val post = Api.getPost(postId).post
+            text = post.text
+            tags = post.tags.orEmpty()
+            images = post.images.orEmpty().map { PendingImage(localPath = "", remoteUrl = it, uploading = false) }
+        } catch (err: Throwable) {
+            context.toast(err.errorMessage("帖子不存在或已删除"))
+            nav.pop()
+        }
+        loadingPost = false
+    }
+
+    fun canPublish() = text.trim().isNotEmpty() && !publishing && !loadingPost && images.none { it.uploading }
 
     fun importImage(uri: android.net.Uri) {
         scope.launch {
@@ -571,12 +706,13 @@ fun ComposeScreen(nav: NavStack) {
         }
     }
 
+    // PickMultipleVisualMedia 要求 maxItems > 1，不能把“剩余可传张数”（可能为 1）直接作为参数；
+    // 固定为上限，实际数量在回调里按剩余可传张数截断，避免选多张时闪退。
     val pickImages = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(
-            maxItems = maxOf(1, AppConfig.MAX_POST_IMAGES - images.size),
-        ),
+        ActivityResultContracts.PickMultipleVisualMedia(AppConfig.MAX_POST_IMAGES),
     ) { uris ->
-        uris?.forEach { importImage(it) }
+        val remain = (AppConfig.MAX_POST_IMAGES - images.size).coerceAtLeast(0)
+        uris?.take(remain)?.forEach { importImage(it) }
     }
 
     fun pickImagesClick() {
@@ -608,19 +744,30 @@ fun ComposeScreen(nav: NavStack) {
         publishing = true
         scope.launch {
             try {
-                val resp = Api.createPost(
-                    text = text.trim(),
-                    images = images.map { it.remoteUrl },
-                    tags = tags,
-                )
-                if (!resp.moderation.pass) {
-                    context.toast(resp.message.ifEmpty { "内容未通过审核，请修改后重试" })
-                } else {
-                    context.toast(resp.message.ifEmpty { "发布成功" })
+                if (isEditing) {
+                    val resp = Api.updatePost(
+                        id = postId,
+                        text = text.trim(),
+                        images = images.map { it.remoteUrl },
+                        tags = tags,
+                    )
+                    context.toast(resp.message.ifEmpty { "已保存，审核通过后展示新版本" })
                     nav.pop()
+                } else {
+                    val resp = Api.createPost(
+                        text = text.trim(),
+                        images = images.map { it.remoteUrl },
+                        tags = tags,
+                    )
+                    if (!resp.moderation.pass) {
+                        context.toast(resp.message.ifEmpty { "内容未通过审核，请修改后重试" })
+                    } else {
+                        context.toast(resp.message.ifEmpty { "发布成功" })
+                        nav.pop()
+                    }
                 }
             } catch (err: Throwable) {
-                context.toast(err.errorMessage("发布失败，请稍后重试"))
+                context.toast(err.errorMessage(if (isEditing) "保存失败，请稍后重试" else "发布失败，请稍后重试"))
             } finally {
                 publishing = false
             }
@@ -629,7 +776,7 @@ fun ComposeScreen(nav: NavStack) {
 
     Column(modifier = Modifier.fillMaxSize().background(AppColors.PAGE_BG)) {
         NavBar(
-            title = "发布动态",
+            title = if (isEditing) "编辑帖子" else "发布动态",
             showBack = false,
             leftText = "取消",
             onLeft = { nav.pop() },
@@ -637,6 +784,11 @@ fun ComposeScreen(nav: NavStack) {
             rightEnabled = canPublish(),
             onRight = { publish() },
         )
+
+        if (loadingPost) {
+            LoadingView()
+            return@Column
+        }
 
         Column(
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -666,9 +818,15 @@ fun ComposeScreen(nav: NavStack) {
                 images.chunked(3).forEach { rowImages ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         rowImages.forEach { img ->
+                            // 编辑模式下旧图只有远端 URL；本地图唯一键为 localPath，远端图为 remoteUrl
+                            val imageKey = img.localPath.ifEmpty { img.remoteUrl }
                             Box {
                                 AsyncImage(
-                                    model = java.io.File(img.localPath),
+                                    model = if (img.localPath.isNotEmpty()) {
+                                        java.io.File(img.localPath)
+                                    } else {
+                                        Http.absoluteMediaUrl(img.remoteUrl)
+                                    },
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
@@ -702,7 +860,9 @@ fun ComposeScreen(nav: NavStack) {
                                         .size(22.dp)
                                         .background(Color(0x99000000), RoundedCornerShape(11.dp))
                                         .clickable {
-                                            images = images.filter { it.localPath != img.localPath }
+                                            images = images.filter {
+                                                (it.localPath.ifEmpty { it.remoteUrl }) != imageKey
+                                            }
                                         },
                                 )
                             }
@@ -780,7 +940,11 @@ fun ComposeScreen(nav: NavStack) {
             }
 
             Text(
-                "发布前请确认内容符合社区公约；演示环境内置内容审核，命中违禁词将被拦截。",
+                if (isEditing) {
+                    "新版本审核通过前，旧版本继续公开。"
+                } else {
+                    "发布前请确认内容符合社区公约；演示环境内置内容审核，命中违禁词将被拦截。"
+                },
                 fontSize = 11.sp,
                 color = AppColors.TEXT_SECONDARY,
                 modifier = Modifier.fillMaxWidth(),
@@ -984,6 +1148,7 @@ fun SearchScreen(nav: NavStack, initialKeyword: String) {
                                 keyword = tag
                                 doSearch()
                             },
+                            onAuthor = { nav.push(Route.UserProfile(it.author.id)) },
                         )
                     }
                 }
@@ -1083,6 +1248,7 @@ fun ContentListScreen(nav: NavStack, mode: String) {
                                 }
                             },
                             onTag = { nav.push(Route.Search(it)) },
+                            onAuthor = { nav.push(Route.UserProfile(it.author.id)) },
                         )
                     }
                     if (items.isEmpty()) {
@@ -1136,7 +1302,10 @@ fun AnnouncementsScreen(nav: NavStack) {
                         .padding(horizontal = 12.dp),
                 ) {
                     items(items, key = { it.id }) { item ->
-                        AnnouncementCard(announcement = item)
+                        AnnouncementCard(
+                            announcement = item,
+                            onOpen = { nav.push(Route.AnnouncementDetail(it.id)) },
+                        )
                     }
                     if (items.isEmpty()) {
                         item { EmptyState(title = "暂无公告") }

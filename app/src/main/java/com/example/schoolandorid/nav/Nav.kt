@@ -8,6 +8,7 @@ import com.example.schoolandorid.model.AppNotification
 sealed interface Route {
     data object Login : Route
     data object Register : Route
+    data object ForgotPassword : Route
     data object Tabs : Route
     data class PostDetail(val id: Long) : Route
     data class NotificationDetail(val notification: AppNotification) : Route
@@ -15,9 +16,13 @@ sealed interface Route {
     data class LegalDocument(val type: String) : Route
     data object NotificationSettings : Route
     data object About : Route
-    data object Compose : Route
+    /** 发布 / 编辑帖子：postId > 0 时为编辑模式（对齐 web 端 /compose/:postId）。 */
+    data class Compose(val postId: Long = 0) : Route
     data class Search(val keyword: String) : Route
     data object Announcements : Route
+    data class AnnouncementDetail(val id: Long) : Route
+    /** 公开主页（对齐 web 端 /users/:id）。 */
+    data class UserProfile(val id: Long) : Route
     data object Tools : Route
     data object AI : Route
     data class Chat(val id: Long, val name: String) : Route
@@ -26,6 +31,8 @@ sealed interface Route {
     data object EditProfile : Route
     data object Verification : Route
     data object AccountSettings : Route
+    /** 我的申诉（对齐鸿蒙端 pages/Appeals.ets）：punishmentId > 0 时可直接提交该处罚的申诉。 */
+    data class Appeals(val punishmentId: Long = 0) : Route
 }
 
 /** 页面栈（对齐鸿蒙端 NavPathStack 的 push / pop / replace 语义）。 */

@@ -186,7 +186,7 @@ fun TabsScreen(nav: NavStack) {
 
         // 发布按钮
         FloatingActionButton(
-            onClick = { nav.push(Route.Compose) },
+            onClick = { nav.push(Route.Compose()) },
             containerColor = AppColors.PRIMARY,
             contentColor = Color.White,
             shape = CircleShape,
@@ -460,6 +460,7 @@ fun HomeTab(nav: NavStack) {
                             onLike = { handleLike(it) },
                             onBookmark = { handleBookmark(it) },
                             onTag = { openSearch(it) },
+                            onAuthor = { nav.push(Route.UserProfile(it.author.id)) },
                         )
                     }
 

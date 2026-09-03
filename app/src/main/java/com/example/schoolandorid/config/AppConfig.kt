@@ -3,16 +3,19 @@ package com.example.schoolandorid.config
 import androidx.compose.ui.graphics.Color
 
 /**
- * 全局常量与接口配置（对齐鸿蒙端 AppConfig.ets）。
- * 真机联调时将 API_BASE_URL 改为电脑局域网地址或线上 HTTPS 地址；
- * Android 模拟器访问宿主机使用 10.0.2.2。
+ * 全局常量与接口配置（对齐鸿蒙端 AppConfig.ets 与 web 端部署约定）。
+ * 服务端即 /Users/zhihu/community 仓库（Go/Gin），生产环境已上线。
+ *
+ * 环境切换：
+ * - 生产（默认）：https://xsnbb.xyz（Nginx 443 → 应用 8080）
+ * - 局域网真机联调：改为电脑局域网地址，如 http://192.168.x.x:8080
+ * - Android 模拟器访问宿主机：http://10.0.2.2:8080
  */
 object AppConfig {
     const val APP_VERSION = "1.0.0"
     const val BUILD_VERSION = "1"
 
-    // 当前真机 / 模拟器联调电脑地址；服务端源码位于 /Users/zhihu/school/server。
-    const val API_BASE_URL = "http://10.19.236.131:8080"
+    const val API_BASE_URL = "https://xsnbb.xyz"
     const val REQUEST_TIMEOUT_MS = 15000L
     const val MAX_POST_IMAGES = 9
     const val MAX_POST_TAGS = 3

@@ -61,7 +61,12 @@ import com.example.schoolandorid.ui.errorMessage
 import com.example.schoolandorid.ui.toast
 import com.example.schoolandorid.util.ImageUtils
 import kotlinx.coroutines.launch
-
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.graphics.Color
+import com.example.schoolandorid.model.Appeal
+import com.example.schoolandorid.ui.components.EmptyState
+import com.example.schoolandorid.util.TimeUtil
 /** 编辑资料（对齐鸿蒙端 pages/EditProfile.ets）。 */
 @Composable
 fun EditProfileScreen(nav: NavStack) {
@@ -906,6 +911,152 @@ fun LegalDocumentScreen(nav: NavStack, documentType: String) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
+        }
+    }
+}
+
+/** 我的申诉（对齐鸿蒙端 pages/Appeals.ets）：查看申诉记录，punishmentId > 0 时可直接发起该处罚的申诉。 */
+@Composable
+fun AppealsScreen(nav: NavStack, punishmentId: Long) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(true) }
+    var appeals by remember { mutableStateOf<List<Appeal>>(emptyList()) }
+    var reason by remember { mutableStateOf("") }
+    var submitting by remember { mutableStateOf(false) }
+
+    suspend fun load() {
+        try {
+            appeals = Api.myAppeals().sortedByDescending { it.created_at }
+        } catch (_: Throwable) {
+        }
+        loading = false
+    }
+
+    LaunchedEffect(Unit) { load() }
+
+    fun statusText(status: String) = when (status) {
+        "pending" -> "待处理"
+        "lifted" -> "处罚已解除"
+        "upheld" -> "维持处罚"
+        else -> status
+    }
+
+    fun statusColor(status: String) = when (status) {
+        "pending" -> AppColors.ORANGE
+        "lifted" -> AppColors.SUCCESS
+        "upheld" -> AppColors.DANGER
+        else -> AppColors.TEXT_SECONDARY
+    }
+
+    fun submit() {
+        if (reason.trim().isEmpty() || submitting) return
+        submitting = true
+        scope.launch {
+            try {
+                Api.createAppeal(punishmentId, reason.trim())
+                reason = ""
+                context.toast("申诉已提交，等待管理员处理")
+                load()
+            } catch (err: Throwable) {
+                context.toast(err.errorMessage("提交失败，请稍后重试"))
+            } finally {
+                submitting = false
+            }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(AppColors.PAGE_BG)) {
+        NavBar(title = "我的申诉", onBack = { nav.pop() })
+
+        if (loading) {
+            LoadingView()
+        } else {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+            ) {
+                if (punishmentId > 0) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(AppColors.CARD_BG, RoundedCornerShape(12.dp))
+                            .padding(14.dp),
+                    ) {
+                        Text("发起申诉", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = AppColors.TEXT_PRIMARY)
+                        Text("请说明申诉理由，管理员核实后会尽快处理。", fontSize = 12.sp, color = AppColors.TEXT_SECONDARY)
+                        OutlinedTextField(
+                            value = reason,
+                            onValueChange = { reason = it },
+                            placeholder = { Text("请填写申诉理由", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
+                            minLines = 4,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = AppColors.PAGE_BG,
+                                focusedContainerColor = AppColors.CARD_BG,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = AppColors.PRIMARY,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            onClick = { submit() },
+                            enabled = reason.trim().isNotEmpty() && !submitting,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AppColors.PRIMARY,
+                                disabledContainerColor = AppColors.PRIMARY_DISABLED,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp),
+                        ) {
+                            Text(if (submitting) "提交中…" else "提交申诉", fontSize = 14.sp)
+                        }
+                    }
+                }
+
+                if (appeals.isEmpty()) {
+                    EmptyState(title = "暂无申诉记录", desc = "收到处罚通知后，可在此提交申诉。")
+                } else {
+                    Text("申诉记录", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = AppColors.TEXT_PRIMARY, modifier = Modifier.fillMaxWidth())
+                    appeals.forEach { appeal ->
+                        val color = statusColor(appeal.status)
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(AppColors.CARD_BG, RoundedCornerShape(12.dp))
+                                .padding(14.dp),
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(if (appeal.kind == "ban") "账号封禁申诉" else "禁言申诉", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AppColors.TEXT_PRIMARY)
+                                Text(
+                                    statusText(appeal.status),
+                                    fontSize = 12.sp,
+                                    color = color,
+                                    modifier = Modifier
+                                        .background(color.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
+                            Text("申诉理由：${appeal.reason}", fontSize = 13.sp, lineHeight = 20.sp, color = AppColors.TEXT_PRIMARY, modifier = Modifier.fillMaxWidth())
+                            Text("提交于 ${TimeUtil.format(appeal.created_at)}", fontSize = 11.sp, color = AppColors.TEXT_SECONDARY, modifier = Modifier.fillMaxWidth())
+                            if (!appeal.result.isNullOrEmpty()) {
+                                Text("处理结果：${appeal.result}", fontSize = 12.sp, color = AppColors.TEXT_SECONDARY, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
             }
         }
     }

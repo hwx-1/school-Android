@@ -207,6 +207,197 @@ fun LoginScreen(nav: NavStack) {
                 color = AppColors.PRIMARY,
                 modifier = Modifier.clickable { nav.push(Route.Register) },
             )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "忘记密码？",
+                fontSize = 13.sp,
+                color = AppColors.PRIMARY,
+                modifier = Modifier.clickable { nav.push(Route.ForgotPassword) },
+            )
+        }
+    }
+}
+
+/** 忘记密码（对齐 web 端 AuthPage forgot 模式）：验证码重置密码。 */
+@Composable
+fun ForgotPasswordScreen(nav: NavStack) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var phone by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
+    var countdown by remember { mutableIntStateOf(0) }
+    var devCodeTip by remember { mutableStateOf("") }
+    var finished by remember { mutableStateOf(false) }
+
+    fun canSendCode() = phone.length == 11 && !sending && countdown == 0
+    fun canSubmit() = phone.length == 11 && code.length >= 4 && password.length >= 6 && !submitting
+
+    fun handleSendCode() {
+        if (!canSendCode()) return
+        sending = true
+        scope.launch {
+            try {
+                // purpose=reset：验证码用于重置密码，与注册验证码分开校验
+                val resp = Api.smsCode(phone, purpose = "reset")
+                launch {
+                    countdown = 60
+                    while (countdown > 0) {
+                        delay(1000)
+                        countdown -= 1
+                    }
+                }
+                devCodeTip = if (resp.dev_mode && !resp.dev_code.isNullOrEmpty()) {
+                    "开发模式验证码：${resp.dev_code}"
+                } else {
+                    "验证码已发送，请注意查收"
+                }
+                context.toast("验证码已下发")
+            } catch (err: Throwable) {
+                context.toast(err.errorMessage("发送失败，请稍后重试"))
+            } finally {
+                sending = false
+            }
+        }
+    }
+
+    fun handleReset() {
+        if (!canSubmit()) {
+            context.toast("请完整填写信息")
+            return
+        }
+        submitting = true
+        scope.launch {
+            try {
+                Api.resetPassword(phone, code, password)
+                finished = true
+            } catch (err: Throwable) {
+                context.toast(err.errorMessage("重置失败，请稍后重试"))
+            } finally {
+                submitting = false
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.PAGE_BG)
+            .verticalScroll(rememberScrollState())
+            .padding(start = 28.dp, end = 28.dp, top = 32.dp, bottom = 32.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "‹",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Medium,
+                color = AppColors.TEXT_PRIMARY,
+                modifier = Modifier.clickable { nav.pop() },
+            )
+        }
+
+        if (finished) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 80.dp),
+            ) {
+                Text("✓", fontSize = 44.sp, color = AppColors.SUCCESS)
+                Spacer(Modifier.height(12.dp))
+                Text("密码重置成功", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = AppColors.TEXT_PRIMARY)
+                Spacer(Modifier.height(8.dp))
+                Text("请使用新密码重新登录社区。", fontSize = 13.sp, color = AppColors.TEXT_SECONDARY)
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = { nav.pop() },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.PRIMARY),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                ) {
+                    Text("返回登录", fontSize = 16.sp)
+                }
+            }
+            return@Column
+        }
+
+        Text("重置登录密码", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = AppColors.TEXT_PRIMARY)
+        Text("验证码将发送至已绑定手机号。", fontSize = 13.sp, color = AppColors.TEXT_SECONDARY)
+
+        OutlinedTextField(
+            value = phone,
+            onValueChange = { if (it.length <= 11 && it.all(Char::isDigit)) phone = it },
+            placeholder = { Text("手机号", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            colors = authFieldColors(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+                value = code,
+                onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) code = it },
+                placeholder = { Text("短信验证码", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp),
+                colors = authFieldColors(),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+            )
+            Button(
+                onClick = { handleSendCode() },
+                enabled = canSendCode(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AppColors.PRIMARY,
+                    disabledContainerColor = AppColors.PRIMARY_DISABLED,
+                ),
+                modifier = Modifier.height(52.dp),
+            ) {
+                Text(if (countdown > 0) "${countdown}s" else "获取验证码", fontSize = 13.sp)
+            }
+        }
+
+        if (devCodeTip.isNotEmpty()) {
+            Text(devCodeTip, fontSize = 12.sp, color = AppColors.ORANGE, modifier = Modifier.fillMaxWidth())
+        }
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            placeholder = { Text("新密码（至少 6 位）", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            colors = authFieldColors(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+        )
+
+        Button(
+            onClick = { handleReset() },
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (canSubmit()) AppColors.PRIMARY else AppColors.PRIMARY_DISABLED,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+        ) {
+            Text(if (submitting) "提交中…" else "确认重置", fontSize = 16.sp)
         }
     }
 }

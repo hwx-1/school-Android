@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- 内测阶段保留明文流量以支持局域网 HTTP 联调；默认走生产 HTTPS。正式发版前应改为 false。 -->
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

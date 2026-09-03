@@ -67,12 +67,11 @@ object Http {
         .readTimeout(AppConfig.REQUEST_TIMEOUT_MS * 4, TimeUnit.MILLISECONDS)
         .build()
 
-    /** 通用 JSON 请求。T 为 null 时表示无响应体（204 / 空串）。 */
-    suspend fun request(
-        method: String,
-        path: String,
-        body: Any? = null,
-    ): String = withContext(Dispatchers.IO) {
+    private val streamClient: OkHttpClient = client.newBuilder()
+        .readTimeout(120, TimeUnit.SECONDS)
+        .build()
+
+    private fun buildRequest(method: String, path: String, body: Any?): Request {
         val builder = Request.Builder()
             .url("${AppConfig.API_BASE_URL}$path")
             .header("Accept", "application/json")
@@ -99,9 +98,17 @@ object Http {
                 builder.method(method, bodyText.toRequestBody("application/json".toMediaType()))
             }
         }
+        return builder.build()
+    }
 
+    /** 通用 JSON 请求。T 为 null 时表示无响应体（204 / 空串）。 */
+    suspend fun request(
+        method: String,
+        path: String,
+        body: Any? = null,
+    ): String = withContext(Dispatchers.IO) {
         try {
-            client.newCall(builder.build()).execute().use { response ->
+            client.newCall(buildRequest(method, path, body)).execute().use { response ->
                 CookieJar.absorb(response.headers("Set-Cookie"))
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
@@ -113,6 +120,48 @@ object Http {
                     )
                 }
                 text
+            }
+        } catch (e: ApiError) {
+            throw e
+        } catch (e: Exception) {
+            throw ApiError(0, "NETWORK_ERROR", "暂时无法连接服务器，请检查网络后重试（${e.message}）")
+        }
+    }
+
+    /**
+     * SSE 流式请求：逐行读取 `data:` 事件并回调。
+     * 回调运行在 IO 线程，调用方通过 withContext(Dispatchers.Main) 切回主线程更新 UI。
+     */
+    suspend fun stream(
+        method: String,
+        path: String,
+        body: Any? = null,
+        onEvent: suspend (String) -> Unit,
+    ): Unit = withContext(Dispatchers.IO) {
+        try {
+            val request = buildRequest(method, path, body).newBuilder()
+                .header("Accept", "text/event-stream")
+                .build()
+            streamClient.newCall(request).execute().use { response ->
+                CookieJar.absorb(response.headers("Set-Cookie"))
+                if (!response.isSuccessful) {
+                    val text = response.body?.string().orEmpty()
+                    val payload = runCatching { gson.fromJson(text, ApiErrorBody::class.java) }.getOrNull()
+                    throw ApiError(
+                        response.code,
+                        payload?.error?.code ?: "UNKNOWN",
+                        payload?.error?.message ?: "请求失败，请稍后重试",
+                    )
+                }
+                val source = response.body?.source()
+                    ?: throw ApiError(0, "STREAM_EMPTY", "未收到流式响应")
+                while (true) {
+                    val line = source.readUtf8Line() ?: break
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("data:")) {
+                        onEvent(trimmed.removePrefix("data:").trim())
+                    }
+                }
             }
         } catch (e: ApiError) {
             throw e

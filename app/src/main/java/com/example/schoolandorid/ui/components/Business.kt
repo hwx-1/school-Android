@@ -63,6 +63,7 @@ fun PostCard(
     onLike: (Post) -> Unit = {},
     onBookmark: (Post) -> Unit = {},
     onTag: (String) -> Unit = {},
+    onAuthor: (Post) -> Unit = {},
 ) {
     val imageUrls = post.images.orEmpty().map { Http.absoluteMediaUrl(it) }
     val imageSpan = when {
@@ -83,7 +84,9 @@ fun PostCard(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.clickable { onOpen(post) },
         ) {
-            AvatarView(avatar = post.author.avatar, nickname = post.author.nickname, diameter = 40)
+            Box(modifier = Modifier.clickable { onAuthor(post) }) {
+                AvatarView(avatar = post.author.avatar, nickname = post.author.nickname, diameter = 40)
+            }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -251,6 +254,8 @@ fun CommentItemView(
     replyToName: String = "",
     isReply: Boolean = false,
     onReply: (CommentItem) -> Unit = {},
+    onReport: (CommentItem) -> Unit = {},
+    onAuthor: (CommentItem) -> Unit = {},
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -259,11 +264,13 @@ fun CommentItemView(
             .clickable(enabled = !comment.deleted) { onReply(comment) }
             .padding(vertical = 10.dp),
     ) {
-        AvatarView(
-            avatar = comment.author.avatar,
-            nickname = comment.author.nickname,
-            diameter = if (isReply) 24 else 32,
-        )
+        Box(modifier = Modifier.clickable(enabled = !comment.deleted) { onAuthor(comment) }) {
+            AvatarView(
+                avatar = comment.author.avatar,
+                nickname = comment.author.nickname,
+                diameter = if (isReply) 24 else 32,
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -291,6 +298,12 @@ fun CommentItemView(
                 Text(TimeUtil.format(comment.created_at), fontSize = 11.sp, color = AppColors.TEXT_SECONDARY)
                 if (!comment.deleted) {
                     Text("回复", fontSize = 11.sp, color = AppColors.TEXT_SECONDARY)
+                    Text(
+                        "举报",
+                        fontSize = 11.sp,
+                        color = AppColors.TEXT_SECONDARY,
+                        modifier = Modifier.clickable { onReport(comment) },
+                    )
                 }
             }
         }
@@ -520,16 +533,15 @@ fun notificationTypeColor(type: String): Color = when (type) {
     else -> AppColors.PURPLE
 }
 
-/** 公告卡片，点击展开全文（对齐鸿蒙端 AnnouncementCard.ets）。 */
+/** 公告卡片，点击进入详情页（对齐 web 端 /announcements/:id）。 */
 @Composable
-fun AnnouncementCard(announcement: Announcement) {
-    var expanded by remember(announcement.id) { mutableStateOf(false) }
+fun AnnouncementCard(announcement: Announcement, onOpen: (Announcement) -> Unit = {}) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
             .background(AppColors.CARD_BG, RoundedCornerShape(12.dp))
-            .clickable { expanded = !expanded }
+            .clickable { onOpen(announcement) }
             .padding(14.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -543,10 +555,10 @@ fun AnnouncementCard(announcement: Announcement) {
             )
         }
         Text(
-            if (expanded) announcement.body else announcement.summary,
+            announcement.summary.ifEmpty { announcement.body },
             fontSize = 13.sp,
             color = AppColors.TEXT_SECONDARY,
-            maxLines = if (expanded) Int.MAX_VALUE else 2,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         Row {
@@ -556,7 +568,7 @@ fun AnnouncementCard(announcement: Announcement) {
                 color = AppColors.TEXT_SECONDARY,
                 modifier = Modifier.weight(1f),
             )
-            Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = AppColors.PRIMARY)
+            Text("查看详情", fontSize = 12.sp, color = AppColors.PRIMARY)
         }
     }
 }
