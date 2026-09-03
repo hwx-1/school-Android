@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -42,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -208,6 +211,8 @@ private val sortOptions = listOf(
     "bookmarks" to "收藏",
 )
 
+private const val HOME_PAGE_SIZE = 15
+
 /** 首页信息流（对齐鸿蒙端 components/tabs/HomeTab.ets）。 */
 @Composable
 fun HomeTab(nav: NavStack) {
@@ -221,16 +226,35 @@ fun HomeTab(nav: NavStack) {
     var settings by remember { mutableStateOf(PublicSettings()) }
     var tools by remember { mutableStateOf<List<CampusTool>>(emptyList()) }
     var posts by remember { mutableStateOf<List<Post>>(emptyList()) }
+    var hasMore by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
     var sortMode by remember { mutableStateOf("time") }
+    val listState = rememberLazyListState()
     val likingIds = remember { mutableSetOf<Long>() }
     val bookmarkingIds = remember { mutableSetOf<Long>() }
 
     suspend fun loadPosts() {
         loadError = ""
         try {
-            posts = Api.listPosts("", false)
+            val page = Api.listPostsPage("", false, limit = HOME_PAGE_SIZE, offset = 0)
+            posts = page.items
+            hasMore = page.has_more
         } catch (err: Throwable) {
             loadError = err.errorMessage("加载失败")
+        }
+    }
+
+    suspend fun loadMore() {
+        if (!hasMore || loadingMore) return
+        loadingMore = true
+        try {
+            val page = Api.listPostsPage("", false, limit = HOME_PAGE_SIZE, offset = posts.size)
+            posts = posts + page.items
+            hasMore = page.has_more
+        } catch (err: Throwable) {
+            context.toast(err.errorMessage("加载失败"))
+        } finally {
+            loadingMore = false
         }
     }
 
@@ -257,6 +281,19 @@ fun HomeTab(nav: NavStack) {
 
     LaunchedEffect(postRevision) {
         if (!loading && postRevision > 0) loadPosts()
+    }
+
+    // 接近底部时自动加载下一页（提前 4 个 item 触发，避免到底才加载）
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = info.totalItemsCount
+            hasMore && !loadingMore && total > 0 && last >= total - 4
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) loadMore()
     }
 
     fun patchPost(updated: Post) {
@@ -402,6 +439,7 @@ fun HomeTab(nav: NavStack) {
                 modifier = Modifier.weight(1f),
             ) {
                 LazyColumn(
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
                 ) {
@@ -467,6 +505,31 @@ fun HomeTab(nav: NavStack) {
                     if (posts.isEmpty()) {
                         item(key = "empty") {
                             EmptyState(title = "还没有帖子", desc = "来发第一条校园动态吧")
+                        }
+                    } else {
+                        item(key = "footer") {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                            ) {
+                                when {
+                                    loadingMore -> {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            CircularProgressIndicator(
+                                                color = AppColors.PRIMARY,
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                            )
+                                            Text("正在加载更多…", fontSize = 13.sp, color = AppColors.TEXT_SECONDARY)
+                                        }
+                                    }
+                                    hasMore -> Text("继续下滑加载更多", fontSize = 12.sp, color = AppColors.TEXT_SECONDARY)
+                                    else -> Text("已经看到这里了", fontSize = 12.sp, color = AppColors.TEXT_SECONDARY)
+                                }
+                            }
                         }
                     }
 

@@ -264,3 +264,6 @@ data class PublicUserResp(val user: PublicAccount, val posts: List<Post> = empty
 data class AnnouncementResp(val announcement: Announcement)
 
 data class SubmitAppealResp(val submitted: Boolean = false)
+
+/** 帖子分页响应（对齐后端 listPosts 的 total / has_more）。 */
+data class PostsPage(val items: List<Post> = emptyList(), val total: Int = 0, val has_more: Boolean = false)

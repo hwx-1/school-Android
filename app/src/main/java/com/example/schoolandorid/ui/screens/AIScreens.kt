@@ -58,6 +58,24 @@ import com.example.schoolandorid.util.TimeUtil
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** 去除大模型回答中的 Markdown 记号（对齐 web 端 formatAIAnswer）。 */
+private fun formatAIAnswer(text: String): String {
+    return text
+        .replace("\r\n", "\n")
+        .replace(Regex("(?m)^#{1,6}\\s*"), "")
+        .replace(Regex("\\*\\*([^*]+)\\*\\*"), "$1")
+        .replace(Regex("__([^_]+)__"), "$1")
+        .replace(Regex("(?<![\\w*])\\*([^*\\n]+)\\*(?![\\w*])"), "$1")
+        .replace(Regex("```[\\s\\S]*?```")) { m -> m.value.replace("`", "") }
+        .replace(Regex("`([^`]*)`"), "$1")
+        .replace(Regex("(?m)^\\s*[-*+]\\s+"), "· ")
+        .replace(Regex("(?m)^\\s{0,3}(\\d+)[.、]\\s+"), "$1. ")
+        .replace(Regex("(?m)^\\s*>\\s?"), "")
+        .replace(Regex("\\[([^\\]]*)\\]\\([^)]*\\)"), "$1")
+        .replace(Regex("\\n{3,}"), "\n\n")
+        .trim()
+}
+
 /**
  * AI 对话页（对齐鸿蒙端 pages/AIChat.ets，仿 DeepSeek 移动端布局）：
  * 进入即展开新对话，右上角提供「对话记录」与「新对话」两个入口，历史会话以内嵌弹层展示。
@@ -440,7 +458,7 @@ private fun AssistantBubble(
         }
         if (text.isNotEmpty()) {
             Text(
-                text,
+                formatAIAnswer(text),
                 fontSize = 15.sp,
                 lineHeight = 22.sp,
                 color = AppColors.TEXT_PRIMARY,

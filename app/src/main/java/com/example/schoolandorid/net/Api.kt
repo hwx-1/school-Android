@@ -38,13 +38,18 @@ object Api {
     suspend fun me(): AccountResp = Http.parse(Http.request("GET", "/api/v1/me"))
 
     // ---- 帖子 ----
-    suspend fun listPosts(query: String, mineOnly: Boolean): List<Post> {
+    suspend fun listPosts(query: String, mineOnly: Boolean): List<Post> =
+        listPostsPage(query, mineOnly).items
+
+    /** 分页拉取帖子：limit/offset 缺省不传，服务端不限制并返回 total/has_more。 */
+    suspend fun listPostsPage(query: String, mineOnly: Boolean, limit: Int? = null, offset: Int? = null): PostsPage {
         val params = mutableListOf<String>()
         if (query.isNotEmpty()) params.add("q=${java.net.URLEncoder.encode(query, "UTF-8")}")
         if (mineOnly) params.add("mine=1")
+        if (limit != null && limit > 0) params.add("limit=$limit")
+        if (offset != null && offset > 0) params.add("offset=$offset")
         val suffix = if (params.isNotEmpty()) "?${params.joinToString("&")}" else ""
-        val resp: ItemsResp<Post> = Http.parse(Http.request("GET", "/api/v1/posts$suffix"))
-        return resp.items
+        return Http.parse(Http.request("GET", "/api/v1/posts$suffix"))
     }
 
     suspend fun getPost(id: Long): PostResp = Http.parse(Http.request("GET", "/api/v1/posts/$id"))
