@@ -85,6 +85,7 @@ object AppState {
 
     fun initialize(context: Context) {
         prefs = context.getSharedPreferences("xsnbb_prefs", Context.MODE_PRIVATE)
+        CookieJar.initialize(context)
         _privacyAgreed = prefs.getBoolean("privacy_agreed", false)
         _inAppNotificationEnabled = prefs.getBoolean("in_app_notification_enabled", true)
         _notificationBadgeEnabled = prefs.getBoolean("notification_badge_enabled", true)
@@ -189,7 +190,7 @@ object AppState {
         loggedIn = true
     }
 
-    /** 冷启动时尝试用已有 Cookie 恢复登录态（Cookie 为内存会话，进程重启后需重新登录）。 */
+    /** 冷启动时尝试用持久化 Cookie 恢复登录态（对齐 Web 端 7 天会话）。 */
     suspend fun restore(): Boolean {
         if (!CookieJar.hasSession()) {
             clearSession()

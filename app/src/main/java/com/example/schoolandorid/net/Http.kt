@@ -1,5 +1,7 @@
 package com.example.schoolandorid.net
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.example.schoolandorid.config.AppConfig
 import com.example.schoolandorid.model.ApiErrorBody
 import com.example.schoolandorid.model.UploadResp
@@ -25,9 +27,29 @@ class ApiError(val status: Int, val code: String, message: String) : Exception(m
  */
 object CookieJar {
     private val cookies = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private var prefs: SharedPreferences? = null
+    private val gson = Gson()
+
+    /** 冷启动加载持久化会话：登录 Cookie 落盘，进程重启后仍可恢复登录态（对齐 Web 端 7 天会话）。 */
+    fun initialize(context: Context) {
+        prefs = context.getSharedPreferences("xsnbb_cookies", Context.MODE_PRIVATE)
+        val json = prefs?.getString("cookies", null) ?: return
+        val type = object : TypeToken<Map<String, String>>() {}.type
+        val map: Map<String, String>? = runCatching {
+            gson.fromJson<Map<String, String>>(json, type)
+        }.getOrNull()
+        if (map == null) return
+        cookies.clear()
+        cookies.putAll(map)
+    }
+
+    private fun persist() {
+        prefs?.edit()?.putString("cookies", gson.toJson(cookies))?.apply()
+    }
 
     @Synchronized
     fun absorb(setCookies: List<String>) {
+        var changed = false
         for (line in setCookies) {
             val pair = line.split(';')[0]
             val eq = pair.indexOf('=')
@@ -35,12 +57,14 @@ object CookieJar {
                 val name = pair.substring(0, eq).trim()
                 val value = pair.substring(eq + 1).trim()
                 if (value.isEmpty() || value == "deleted") {
-                    cookies.remove(name)
+                    changed = cookies.remove(name) != null || changed
                 } else {
+                    changed = cookies[name] != value || changed
                     cookies[name] = value
                 }
             }
         }
+        if (changed) persist()
     }
 
     fun header(): String = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
@@ -48,9 +72,12 @@ object CookieJar {
     fun csrfToken(): String = cookies["xsnbb_csrf"] ?: ""
 
     @Synchronized
-    fun clear() = cookies.clear()
+    fun clear() {
+        cookies.clear()
+        prefs?.edit()?.remove("cookies")?.apply()
+    }
 
-    fun hasSession(): Boolean = cookies.isNotEmpty()
+    fun hasSession(): Boolean = cookies.containsKey("xsnbb_session")
 }
 
 object Http {

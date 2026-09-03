@@ -72,7 +72,7 @@ fun LoginScreen(nav: NavStack) {
     var submitting by remember { mutableStateOf(false) }
     val agreed = AppState.privacyAgreed
 
-    fun formReady() = phone.length == 11 && password.length >= 6
+    fun formReady() = phone.length == 11 && password.length >= 8
 
     fun handleLogin() {
         if (submitting) return
@@ -80,8 +80,8 @@ fun LoginScreen(nav: NavStack) {
             context.toast("请输入 11 位手机号")
             return
         }
-        if (password.length < 6) {
-            context.toast("密码至少 6 位")
+        if (password.length < 8) {
+            context.toast("密码至少 8 位")
             return
         }
         if (!agreed) {
@@ -160,7 +160,7 @@ fun LoginScreen(nav: NavStack) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            placeholder = { Text("密码（至少 6 位）", color = AppColors.TEXT_SECONDARY) },
+            placeholder = { Text("密码（至少 8 位）", color = AppColors.TEXT_SECONDARY) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             singleLine = true,
@@ -233,7 +233,7 @@ fun ForgotPasswordScreen(nav: NavStack) {
     var finished by remember { mutableStateOf(false) }
 
     fun canSendCode() = phone.length == 11 && !sending && countdown == 0
-    fun canSubmit() = phone.length == 11 && code.length >= 4 && password.length >= 6 && !submitting
+    fun canSubmit() = phone.length == 11 && code.length >= 4 && password.length >= 8 && !submitting
 
     fun handleSendCode() {
         if (!canSendCode()) return
@@ -376,7 +376,7 @@ fun ForgotPasswordScreen(nav: NavStack) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            placeholder = { Text("新密码（至少 6 位）", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
+            placeholder = { Text("新密码（至少 8 位）", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             singleLine = true,
@@ -419,8 +419,8 @@ fun RegisterScreen(nav: NavStack) {
     val agreed = AppState.privacyAgreed
 
     fun canSendCode() = phone.length == 11 && !sending && countdown == 0
-    fun canSubmit() = phone.length == 11 && code.length >= 4 && password.length >= 6 &&
-        nickname.trim().isNotEmpty() && inviteCode.trim().isNotEmpty() && agreed && !submitting
+    fun canSubmit() = phone.length == 11 && code.length >= 4 && password.length >= 8 &&
+        inviteCode.trim().isNotEmpty() && agreed && !submitting
 
     fun handleSendCode() {
         if (!canSendCode()) return
@@ -454,6 +454,10 @@ fun RegisterScreen(nav: NavStack) {
     fun handleRegister() {
         if (!agreed) {
             context.toast("请先阅读并同意《用户协议》和《隐私政策》")
+            return
+        }
+        if (nickname.trim().isNotEmpty() && nickname.trim().length < 2) {
+            context.toast("昵称需为 2–16 个字符")
             return
         }
         if (!canSubmit()) {
@@ -547,7 +551,7 @@ fun RegisterScreen(nav: NavStack) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            placeholder = { Text("密码（至少 6 位）", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
+            placeholder = { Text("密码（至少 8 位）", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             singleLine = true,
@@ -561,7 +565,7 @@ fun RegisterScreen(nav: NavStack) {
         OutlinedTextField(
             value = nickname,
             onValueChange = { if (it.length <= 16) nickname = it },
-            placeholder = { Text("昵称", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
+            placeholder = { Text("公开昵称（选填，2–16 字符）", fontSize = 14.sp, color = AppColors.TEXT_SECONDARY) },
             singleLine = true,
             shape = RoundedCornerShape(10.dp),
             colors = authFieldColors(),

@@ -467,7 +467,7 @@ fun AccountSettingsScreen(nav: NavStack) {
     var deleting by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    fun canChangePassword() = currentPassword.length >= 6 && newPassword.length >= 6 &&
+    fun canChangePassword() = currentPassword.isNotEmpty() && newPassword.length >= 8 &&
         newPassword == confirmPassword && !changing
 
     fun changePassword() {
@@ -558,7 +558,7 @@ fun AccountSettingsScreen(nav: NavStack) {
                 )
                 FormField(
                     label = "新密码",
-                    placeholder = "至少 6 位",
+                    placeholder = "至少 8 位",
                     value = newPassword,
                     onValueChange = { newPassword = it },
                     isPassword = true,
